@@ -1,0 +1,1 @@
+{"schema_version":"1.0","sample_id":"general-001::rag-v1","question_id":"general-001","query":"请介绍公司的年假制度。","chunks":[],"answer":"正式员工每年享有10天带薪年假。","expected_behavior":"answer","tags":["端到端","无检索片段"]}

@@ -29,6 +29,10 @@ class MetricRegistry:
         for metric in self.all():
             eligible = sum(
                 all(has_field(case, field) for field in metric.required_fields)
+                and (
+                    not metric.any_of_fields
+                    or any(has_field(case, field) for field in metric.any_of_fields)
+                )
                 for case in cases
             )
             descriptions.append(
@@ -39,6 +43,7 @@ class MetricRegistry:
                     "dimension_label": DIMENSION_LABELS[metric.dimension],
                     "description": metric.description,
                     "required_fields": list(metric.required_fields),
+                    "any_of_fields": list(metric.any_of_fields),
                     "implemented": metric.implemented,
                     "eligible_samples": eligible,
                     "total_samples": len(cases),

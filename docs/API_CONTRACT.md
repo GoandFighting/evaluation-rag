@@ -24,16 +24,19 @@ MetricSpec(
     description="指标含义和限制",
     required_fields=("query", "answer"),
     evaluator=evaluate,
+    any_of_fields=("relevant_chunk_ids", "relevant_doc_ids"),  # 可选：至少满足其一
 )
 ```
 
 名称一旦发布即视为 API。字段路径使用规范名称，例如 `chunks.content`，导入别名只在 `services/datasets.py` 处理。
 
+`any_of_fields` 为可选字段，声明后指标在 `required_fields` 全部满足且 `any_of_fields` 中至少一个字段存在时才可运行。用于支持同一指标兼容多种粒度的标注（如片段级 `relevant_chunk_ids` 与文档级 `relevant_doc_ids`）。
+
 ## HTTP API
 
 ### `POST /api/datasets/upload`
 
-返回 `dataset_id`、样本数量、检测字段以及每个指标的 `eligible_samples`、`field_ready`、`implemented` 和 `runnable`。
+返回 `dataset_id`、样本数量、检测字段以及每个指标的 `eligible_samples`、`field_ready`、`implemented`、`any_of_fields` 和 `runnable`。
 
 ### `POST /api/evaluations/run`
 

@@ -21,7 +21,7 @@ def test_registry_reports_per_metric_field_coverage():
 
     assert descriptions["token_f1"]["runnable"] is True
     assert descriptions["format_compliance"]["runnable"] is False
-    assert descriptions["faithfulness"]["implemented"] is False
+    assert descriptions["faithfulness"]["implemented"] is True
     assert descriptions["faithfulness"]["eligible_samples"] == 0
 
 

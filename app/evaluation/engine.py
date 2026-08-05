@@ -25,6 +25,9 @@ def evaluate_dataset(
             metric = metric_registry.get(name)
             assert metric is not None
             missing = [field for field in metric.required_fields if not has_field(case, field)]
+            if not missing and metric.any_of_fields:
+                if not any(has_field(case, field) for field in metric.any_of_fields):
+                    missing = list(metric.any_of_fields)
             base = {
                 "sample_id": case.sample_id,
                 "question_id": case.question_id,

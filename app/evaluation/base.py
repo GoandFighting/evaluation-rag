@@ -25,6 +25,7 @@ class MetricSpec:
     description: str
     required_fields: tuple[str, ...]
     evaluator: Evaluator | None = None
+    any_of_fields: tuple[str, ...] = ()
 
     @property
     def implemented(self) -> bool:

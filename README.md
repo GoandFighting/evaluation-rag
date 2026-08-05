@@ -13,8 +13,9 @@ app/evaluation/registry.py          三维度统一注册与字段探测
 app/evaluation/engine.py            逐样本执行与汇总
 app/evaluation/modules/
   end_to_end.py                     端到端回答指标（已实现首批基线）
-  retrieval.py                      检索指标契约（待实现）
-  generation.py                     生成指标契约（待实现）
+  retrieval.py                      检索指标（已实现纯编码基线 + 嵌入/LLM 契约预留）
+  generation.py                     生成指标（已实现纯编码基线 + 嵌入/LLM 契约预留）
+app/evaluation/providers.py          EmbeddingProvider / LLMJudge 接口协议（待部署模型后实现）
 ```
 
 新增指标只需在对应模块中提供 `MetricSpec`。前端通过 API 读取指标元数据，不需要同步修改指标列表。
@@ -60,5 +61,5 @@ pytest
 - 数据集暂存在进程内，服务重启后需重新上传；后续可替换为数据库或对象存储。
 - 评测同步执行，适合首批小数据集；大数据集需要任务队列。
 - 回答相关性目前是可解释的词面基线，不代表语义正确性。
-- 检索和生成指标已经声明字段契约，但 evaluator 留给相应模块负责人实现。
-- LLM Judge、Embedding Provider 及人工校准集尚未接入。
+- 检索和生成指标已实现纯编码（词面/结构）基线；语义类指标（嵌入/LLM Judge）已声明契约，待部署模型后接入 `providers.py` 中的 Provider 协议。
+- LLM Judge、Embedding Provider 尚未接入。

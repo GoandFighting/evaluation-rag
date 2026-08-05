@@ -28,7 +28,27 @@ MetricSpec(
 )
 ```
 
+模型指标使用异步 evaluator，并声明运行能力：
+
+```python
+MetricSpec(
+    name="semantic_similarity",
+    label="语义相似度",
+    dimension="end_to_end",
+    description="回答与参考答案的语义相似度。",
+    required_fields=("answer", "reference_answer"),
+    async_evaluator=evaluate_semantic_similarity,
+    required_capabilities=("embedding",),
+)
+```
+
+异步 evaluator 接收 `(EvaluationCase, EvaluationContext)`。Context 提供
+`embedding_provider`、`llm_judge`、并发上限和单指标超时；普通规则指标继续使用
+只接收 `EvaluationCase` 的同步 `evaluator`。
+
 名称一旦发布即视为 API。字段路径使用规范名称，例如 `chunks.content`，导入别名只在 `services/datasets.py` 处理。
+指标名称在三个维度中全局唯一；Registry 会拒绝重复名称。一个指标只能声明同步
+`evaluator` 或异步 `async_evaluator` 中的一种。
 
 `any_of_fields` 为可选字段，声明后指标在 `required_fields` 全部满足且 `any_of_fields` 中至少一个字段存在时才可运行。用于支持同一指标兼容多种粒度的标注（如片段级 `relevant_chunk_ids` 与文档级 `relevant_doc_ids`）。
 
@@ -36,7 +56,7 @@ MetricSpec(
 
 ### `POST /api/datasets/upload`
 
-返回 `dataset_id`、样本数量、检测字段以及每个指标的 `eligible_samples`、`field_ready`、`implemented`、`any_of_fields` 和 `runnable`。
+返回 `dataset_id`、样本数量、检测字段以及每个指标的 `eligible_samples`、`field_ready`、`implemented`、`configured`、`required_capabilities`、`missing_capabilities`、`any_of_fields` 和 `runnable`。
 
 ### `POST /api/evaluations/run`
 
@@ -46,7 +66,13 @@ MetricSpec(
 {"dataset_id":"uuid","metric_names":["token_f1"]}
 ```
 
-响应包含指标汇总 `summary` 和样本明细 `results`。状态值为 `success`、`not_applicable`、`not_implemented` 或 `failed`。
+响应包含指标汇总 `summary` 和样本明细 `results`。状态值为：
+
+- `success`：指标成功执行；
+- `not_applicable`：样本缺少指标字段；
+- `not_configured`：指标已实现，但缺少 Embedding 或 Judge Provider；
+- `not_implemented`：指标仅声明契约，尚无 evaluator；
+- `failed`：指标执行异常或超时。
 
 ## 兼容性规则
 

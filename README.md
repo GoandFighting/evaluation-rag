@@ -10,12 +10,12 @@ app/main.py                         HTTP API
 app/services/datasets.py            解析、别名兼容、临时数据集存储
 app/evaluation/base.py              MetricSpec 插件契约
 app/evaluation/registry.py          三维度统一注册与字段探测
-app/evaluation/engine.py            逐样本执行与汇总
+app/evaluation/engine.py            同步/异步指标调度、并发限制与汇总
 app/evaluation/modules/
   end_to_end.py                     端到端回答指标（已实现首批基线）
   retrieval.py                      检索指标（已实现纯编码基线 + 嵌入/LLM 契约预留）
   generation.py                     生成指标（已实现纯编码基线 + 嵌入/LLM 契约预留）
-app/evaluation/providers.py          EmbeddingProvider / LLMJudge 接口协议（待部署模型后实现）
+app/evaluation/providers.py          Provider 协议、EvaluationContext 与执行限制
 ```
 
 新增指标只需在对应模块中提供 `MetricSpec`。前端通过 API 读取指标元数据，不需要同步修改指标列表。
@@ -59,7 +59,7 @@ pytest
 ## 当前边界
 
 - 数据集暂存在进程内，服务重启后需重新上传；后续可替换为数据库或对象存储。
-- 评测同步执行，适合首批小数据集；大数据集需要任务队列。
+- 规则指标同步计算，模型指标通过异步 Provider 并发执行；当前仍是请求内评测，大数据集需要任务队列。
 - 回答相关性目前是可解释的词面基线，不代表语义正确性。
-- 检索和生成指标已实现纯编码（词面/结构）基线；语义类指标（嵌入/LLM Judge）已声明契约，待部署模型后接入 `providers.py` 中的 Provider 协议。
+- 检索和生成指标已实现纯编码（词面/结构）基线；语义类指标（嵌入/LLM Judge）已声明能力契约，待部署模型后注入 `EvaluationContext`。
 - LLM Judge、Embedding Provider 尚未接入。

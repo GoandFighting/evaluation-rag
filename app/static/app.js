@@ -92,13 +92,18 @@ function metricCard(metric) {
   input.checked = metric.runnable;
   node.querySelector("strong").textContent = metric.label;
   node.querySelector(".description").textContent = metric.description;
-  node.querySelector(".requirements").textContent = `需要：${metric.required_fields.join(" + ")}`;
+  const requirements = [`字段：${metric.required_fields.join(" + ") || "无"}`];
+  if (metric.required_capabilities.length) requirements.push(`能力：${metric.required_capabilities.join(" + ")}`);
+  node.querySelector(".requirements").textContent = requirements.join("；");
   const stateNode = node.querySelector(".metric-state");
   if (!metric.field_ready) {
     stateNode.textContent = "字段不足";
     stateNode.className += " unavailable";
   } else if (!metric.implemented) {
     stateNode.textContent = "待实现";
+    stateNode.className += " pending";
+  } else if (!metric.configured) {
+    stateNode.textContent = "模型未配置";
     stateNode.className += " pending";
   } else {
     stateNode.textContent = `${metric.eligible_samples}/${metric.total_samples} 可评`;
@@ -125,7 +130,7 @@ function renderResults(data) {
       const percent = item.average === null ? 0 : Math.round(item.average * 100);
       const card = document.createElement("article");
       card.className = "score-card";
-      card.innerHTML = `<div><strong>${escapeHtml(item.metric_label)}</strong><span>${item.average === null ? "—" : percent + "%"}</span></div><div class="bar"><i style="width:${percent}%"></i></div><small>${item.success_count} 成功 · ${item.not_applicable_count} 不适用 · ${item.failed_count} 失败</small>`;
+      card.innerHTML = `<div><strong>${escapeHtml(item.metric_label)}</strong><span>${item.average === null ? "—" : percent + "%"}</span></div><div class="bar"><i style="width:${percent}%"></i></div><small>${item.success_count} 成功 · ${item.not_applicable_count} 不适用 · ${item.not_configured_count} 未配置 · ${item.not_implemented_count} 待实现 · ${item.failed_count} 失败</small>`;
       grid.appendChild(card);
     }
     summaryHost.appendChild(block);
@@ -157,7 +162,7 @@ async function readResponse(response) {
 }
 
 function statusLabel(value) {
-  return { success: "成功", not_applicable: "不适用", failed: "失败", not_implemented: "待实现" }[value] || value;
+  return { success: "成功", not_applicable: "不适用", not_configured: "模型未配置", failed: "失败", not_implemented: "待实现" }[value] || value;
 }
 
 function escapeHtml(value) {

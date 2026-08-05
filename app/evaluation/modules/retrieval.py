@@ -248,6 +248,7 @@ METRICS = [
         "retrieval",
         "问题与检索上下文的嵌入余弦相似度；需部署 EmbeddingProvider 后实现。",
         ("query", "chunks.content"),
+        required_capabilities=("embedding",),
     ),
     # --- LLM-as-judge (contract declared, evaluator pending provider deployment) ---
     MetricSpec(
@@ -256,5 +257,6 @@ METRICS = [
         "retrieval",
         "LLM 逐个判断检索片段是否与问题相关，加权累积精确率（RAGAS 风格）；需部署 LLMJudge 后实现。",
         ("query", "chunks.content"),
+        required_capabilities=("llm_judge",),
     ),
 ]

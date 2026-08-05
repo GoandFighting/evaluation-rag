@@ -263,6 +263,7 @@ METRICS = [
         "generation",
         "嵌入级声明支持检测：逐句计算回答与上下文的语义相似度；需部署 EmbeddingProvider 后实现。",
         ("answer", "chunks.content"),
+        required_capabilities=("embedding",),
     ),
     # --- LLM-as-judge (contract declared, evaluator pending provider deployment) ---
     MetricSpec(
@@ -271,6 +272,7 @@ METRICS = [
         "generation",
         "LLM 逐句判断回答陈述是否受上下文支持（RAGAS/DeepEval 标准实现）；需部署 LLMJudge 后实现。",
         ("answer", "chunks.content"),
+        required_capabilities=("llm_judge",),
     ),
     MetricSpec(
         "factual_correctness",
@@ -278,5 +280,6 @@ METRICS = [
         "generation",
         "LLM 分解声明并做 NLI 判定 TP/FP/FN，对比参考答案；需部署 LLMJudge 后实现。",
         ("answer", "reference_answer"),
+        required_capabilities=("llm_judge",),
     ),
 ]

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
+from app.evaluation.providers import Capability, EvaluationContext
 from app.schemas import Dimension, EvaluationCase
 
 
@@ -15,6 +16,9 @@ class MetricOutcome:
 
 
 Evaluator = Callable[[EvaluationCase], MetricOutcome]
+AsyncEvaluator = Callable[
+    [EvaluationCase, EvaluationContext], Awaitable[MetricOutcome]
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,10 +30,18 @@ class MetricSpec:
     required_fields: tuple[str, ...]
     evaluator: Evaluator | None = None
     any_of_fields: tuple[str, ...] = ()
+    async_evaluator: AsyncEvaluator | None = None
+    required_capabilities: tuple[Capability, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.evaluator is not None and self.async_evaluator is not None:
+            raise ValueError(
+                f"指标 {self.name} 不能同时声明 evaluator 和 async_evaluator。"
+            )
 
     @property
     def implemented(self) -> bool:
-        return self.evaluator is not None
+        return self.evaluator is not None or self.async_evaluator is not None
 
 
 def has_field(case: EvaluationCase, path: str) -> bool:

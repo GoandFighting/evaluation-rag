@@ -37,8 +37,10 @@ docs/<topic>
 ## 指标开发规则
 
 - 指标通过 `MetricSpec` 声明名称、维度、说明和 `required_fields`。
-- evaluator 只接收 `EvaluationCase`，不得依赖 FastAPI、文件上传或前端状态。
+- 规则指标使用同步 evaluator，只接收 `EvaluationCase`；模型指标使用异步 evaluator，接收 `EvaluationCase` 和 `EvaluationContext`。二者都不得依赖 FastAPI、文件上传或前端状态。
+- 模型指标通过 `required_capabilities` 声明 `embedding` 或 `llm_judge`，不得在指标模块中直接读取密钥或创建模型客户端。
 - 缺少字段由引擎返回 `not_applicable`，不得把缺失输入记为 0 分。
+- 缺少模型 Provider 由引擎返回 `not_configured`，不得与 `not_implemented` 混用。
 - 分数统一在 `[0, 1]`，同时返回可复核的 `reason` 和 `evidence`。
 - 修改指标名称或字段语义属于破坏性变更，应同步更新 `schema_version`、文档和示例。
 

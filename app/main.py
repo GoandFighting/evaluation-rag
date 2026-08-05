@@ -6,7 +6,8 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.evaluation.engine import evaluate_dataset
+from app.evaluation.engine import evaluate_dataset_async
+from app.evaluation.providers import EvaluationContext
 from app.evaluation.registry import registry
 from app.schemas import RunRequest
 from app.services.datasets import (
@@ -22,6 +23,7 @@ STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="RAG Evaluation Workbench", version="0.1.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+evaluation_context = EvaluationContext()
 
 
 @app.get("/", include_in_schema=False)
@@ -36,7 +38,7 @@ def health() -> dict[str, str]:
 
 @app.get("/api/metrics")
 def metrics() -> list[dict[str, object]]:
-    return registry.describe_for([])
+    return registry.describe_for([], evaluation_context)
 
 
 @app.post("/api/datasets/upload")
@@ -51,16 +53,20 @@ async def upload_dataset(file: UploadFile = File(...)) -> dict[str, object]:
         "filename": file.filename,
         "sample_count": len(cases),
         "detected_fields": detect_present_fields(cases),
-        "metrics": registry.describe_for(cases),
+        "metrics": registry.describe_for(cases, evaluation_context),
     }
 
 
 @app.post("/api/evaluations/run")
-def run_evaluation(request: RunRequest) -> dict[str, object]:
+async def run_evaluation(request: RunRequest) -> dict[str, object]:
     dataset = dataset_store.get(request.dataset_id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="数据集不存在或服务已重启，请重新上传。")
     try:
-        return evaluate_dataset(dataset.cases, request.metric_names)
+        return await evaluate_dataset_async(
+            dataset.cases,
+            request.metric_names,
+            context=evaluation_context,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

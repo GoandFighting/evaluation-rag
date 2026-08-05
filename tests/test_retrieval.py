@@ -103,6 +103,63 @@ def test_doc_level_fallback_mrr():
     assert mrr(case).score == 0.5
 
 
+def test_mrr_uses_result_order_instead_of_untrusted_rank_metadata():
+    case = make_case(
+        chunks=[
+            Chunk(chunk_id="c1", content="relevant", document_id="d1", rank=10),
+            Chunk(chunk_id="c2", content="other", document_id="d2", rank=1),
+        ],
+        relevant_chunk_ids=["c1"],
+    )
+    assert mrr(case).score == 1.0
+
+
+def test_doc_level_ndcg_counts_a_relevant_document_only_once():
+    case = make_case(
+        chunks=[
+            Chunk(chunk_id="c1", content="part one", document_id="d1", rank=1),
+            Chunk(chunk_id="c2", content="part two", document_id="d1", rank=2),
+        ],
+        relevant_chunk_ids=None,
+        relevant_doc_ids=["d1"],
+    )
+    assert ndcg_at_k(case).score == 1.0
+
+
+# --- doc-level retrieval without chunk_id (only document_id) -------------------
+
+def test_doc_level_retrieval_without_chunk_id():
+    """Chunks with only document_id (no chunk_id) must still run with relevant_doc_ids."""
+    case = make_case(
+        chunks=[
+            Chunk(content="RHEL IOMMU", document_id="d1", rank=1),
+            Chunk(content="Ubuntu IOMMU", document_id="d2", rank=2),
+        ],
+        relevant_chunk_ids=None,
+        relevant_doc_ids=["d1"],
+    )
+    result = evaluate_dataset(
+        [case], ["hit_rate_at_k", "recall_at_k", "precision_at_k", "mrr", "ndcg_at_k"]
+    )
+    assert all(r["status"] == "success" for r in result["results"])
+    assert hit_rate_at_k(case).score == 1.0
+    assert recall_at_k(case).score == 1.0
+
+
+def test_ndcg_preserves_position_with_missing_id():
+    """A chunk without chunk_id must not shift the discount position of later chunks."""
+    case = make_case(
+        chunks=[
+            Chunk(chunk_id=None, content="no id", rank=1),
+            Chunk(chunk_id="c2", content="relevant", rank=2),
+        ],
+        relevant_chunk_ids=["c2"],
+    )
+    # c2 is at position 1 (0-indexed), so DCG = 1/log2(3) ≈ 0.631.
+    # If position were shifted (old bug), DCG would be 1/log2(2) = 1.0.
+    assert 0.6 < ndcg_at_k(case).score < 0.7
+
+
 # --- any_of_fields: either relevance label makes metric runnable ---------------
 
 def test_chunk_relevance_labels_make_metric_runnable():

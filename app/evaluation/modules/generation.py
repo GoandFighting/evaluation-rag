@@ -139,9 +139,9 @@ def citation_correctness(case: EvaluationCase) -> MetricOutcome:
 
     if not refs:
         return MetricOutcome(
-            score=1.0,
-            passed=True,
-            reason="无引用可验证，正确率记为 1.0。",
+            score=0.0,
+            passed=False,
+            reason="回答未提供可验证的引用，正确率不能记为满分。",
             evidence={"total_citations": 0, "valid_citations": 0},
         )
 
@@ -172,11 +172,6 @@ def citation_completeness(case: EvaluationCase) -> MetricOutcome:
     cited = sum(
         1 for s in sentences if _CITATION_MARKER_RE.search(s)
     )
-
-    # If no inline markers but a citation list exists, approximate coverage
-    # by the ratio of citation entries to sentences.
-    if cited == 0 and citations:
-        cited = min(len(citations), len(sentences))
 
     score = cited / len(sentences)
     return MetricOutcome(
@@ -218,7 +213,7 @@ def factual_consistency(case: EvaluationCase) -> MetricOutcome:
 METRICS = [
     MetricSpec(
         "faithfulness",
-        "忠实度",
+        "忠实度（词面基线）",
         "generation",
         "回答中的陈述是否受到上下文支持（词面基线，后续接入 LLM Judge 做语义判定）。",
         ("answer", "chunks.content"),
@@ -226,7 +221,7 @@ METRICS = [
     ),
     MetricSpec(
         "context_utilization",
-        "上下文利用率",
+        "片段利用率（词面基线）",
         "generation",
         "回答是否使用了检索上下文中的关键证据（词面基线）。",
         ("answer", "chunks.content"),
@@ -237,7 +232,7 @@ METRICS = [
         "引用正确性",
         "generation",
         "引用标记或引用列表是否指向有效的检索片段（结构校验）。",
-        ("answer", "citations", "chunks.chunk_id"),
+        ("answer",),
         evaluator=citation_correctness,
     ),
     MetricSpec(
@@ -245,14 +240,14 @@ METRICS = [
         "引用完整性",
         "generation",
         "回答中附带引用的句子比例。",
-        ("answer", "citations"),
+        ("answer",),
         evaluator=citation_completeness,
     ),
     MetricSpec(
         "factual_consistency",
-        "事实一致性",
+        "回答-上下文词元 F1",
         "generation",
-        "回答与上下文的整体词面对齐度（F1 基线，后续接入 LLM 做冲突检测）。",
+        "回答与上下文的整体词面对齐度；仅为 F1 词面基线，不代表事实一致性。",
         ("answer", "chunks.content"),
         evaluator=factual_consistency,
     ),

@@ -134,8 +134,8 @@ def test_citation_completeness_partial():
 def test_citation_completeness_no_markers_with_list():
     case = make_citation_case(answer="无标记句子一。无标记句子二。", citations=[{"chunk_id": "c1"}])
     outcome = citation_completeness(case)
-    # No inline markers, 1 citation → min(1, 2) / 2 = 0.5
-    assert outcome.score == 0.5
+    # A citation list without a sentence/claim mapping cannot prove coverage.
+    assert outcome.score == 0.0
 
 
 # --- factual_consistency --------------------------------------------------------
@@ -160,10 +160,23 @@ def test_empty_context_not_applicable_for_faithfulness():
     assert result["results"][0]["status"] == "not_applicable"
 
 
-def test_no_citations_not_applicable():
+def test_no_citations_does_not_receive_a_perfect_score():
     case = make_case(citations=None)
     result = evaluate_dataset([case], ["citation_correctness"])
-    assert result["results"][0]["status"] == "not_applicable"
+    assert result["results"][0]["status"] == "success"
+    assert result["results"][0]["score"] == 0.0
+    assert result["results"][0]["passed"] is False
+
+
+def test_inline_citations_without_citations_array():
+    """Inline [n] markers must be validated even when no citations array is present."""
+    case = make_citation_case(citations=None)
+    outcome = citation_correctness(case)
+    assert outcome.score == 1.0
+    assert outcome.evidence["valid_citations"] == 2  # [1] and [2] both valid
+
+    result = evaluate_dataset([case], ["citation_correctness", "citation_completeness"])
+    assert all(r["status"] == "success" for r in result["results"])
 
 
 def test_embedding_and_llm_metrics_not_implemented():

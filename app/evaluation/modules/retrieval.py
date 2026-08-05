@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 
 from app.evaluation.base import MetricOutcome, MetricSpec
@@ -46,8 +47,6 @@ def _k_eff(case: EvaluationCase, k: int) -> int:
 
 
 def _log2(n: float) -> float:
-    import math
-
     return math.log2(n) if n > 0 else 0.0
 
 
@@ -119,7 +118,9 @@ def mrr(case: EvaluationCase) -> MetricOutcome:
     for i, chunk in enumerate(case.chunks[:k]):
         rid = chunk.chunk_id if level == "chunk" else chunk.document_id
         if rid is not None and str(rid) in relevant_set:
-            first_rank = chunk.rank if chunk.rank is not None else i + 1
+            # The list order is the retrieval order used by every other
+            # ranking metric. ``rank`` is imported metadata and may be stale.
+            first_rank = i + 1
             break
     score = 1.0 / first_rank if first_rank else 0.0
     return MetricOutcome(
@@ -137,13 +138,24 @@ def mrr(case: EvaluationCase) -> MetricOutcome:
 def ndcg_at_k(case: EvaluationCase) -> MetricOutcome:
     relevant_set, level = _resolve_relevant_ids(case)
     k = _k_eff(case, DEFAULT_K)
-    retrieved = _retrieved_ids(case, level, k)
 
-    # DCG@K with binary relevance.
-    dcg = sum(
-        (1.0 if rid in relevant_set else 0.0) / _log2(i + 2)
-        for i, rid in enumerate(retrieved)
-    )
+    # DCG@K with binary relevance.  Iterate over chunks directly so that
+    # chunks without an ID keep their original position instead of being
+    # skipped (which would shift subsequent items and inflate the score).
+    dcg = 0.0
+    seen_ids: set[str] = set()
+    for i, chunk in enumerate(case.chunks[:k]):
+        rid = chunk.chunk_id if level == "chunk" else chunk.document_id
+        resolved_id = str(rid) if rid is not None else None
+        # A retrieved entity can earn relevance gain only once. This is
+        # especially important when several chunks belong to one document.
+        if (
+            resolved_id is not None
+            and resolved_id in relevant_set
+            and resolved_id not in seen_ids
+        ):
+            dcg += 1.0 / _log2(i + 2)
+            seen_ids.add(resolved_id)
     # IDCG@K: ideal ranking places all relevant items first.
     ideal_hits = min(len(relevant_set), k)
     idcg = sum(1.0 / _log2(i + 2) for i in range(ideal_hits))
@@ -193,7 +205,7 @@ METRICS = [
         "Hit Rate@K",
         "retrieval",
         f"Top-{DEFAULT_K} 是否命中相关片段或文档（二值）。",
-        ("chunks.chunk_id",),
+        ("chunks",),
         any_of_fields=_RELEVANCE_ANY_OF,
         evaluator=hit_rate_at_k,
     ),
@@ -202,7 +214,7 @@ METRICS = [
         "Recall@K",
         "retrieval",
         f"Top-{DEFAULT_K} 召回的相关片段或文档占全部相关标注的比例。",
-        ("chunks.chunk_id",),
+        ("chunks",),
         any_of_fields=_RELEVANCE_ANY_OF,
         evaluator=recall_at_k,
     ),
@@ -211,7 +223,7 @@ METRICS = [
         "Precision@K",
         "retrieval",
         f"Top-{DEFAULT_K} 中相关片段或文档的比例。",
-        ("chunks.chunk_id",),
+        ("chunks",),
         any_of_fields=_RELEVANCE_ANY_OF,
         evaluator=precision_at_k,
     ),
@@ -220,7 +232,7 @@ METRICS = [
         "MRR",
         "retrieval",
         "首个相关结果排名的倒数（Mean Reciprocal Rank）。",
-        ("chunks.chunk_id", "chunks.rank"),
+        ("chunks",),
         any_of_fields=_RELEVANCE_ANY_OF,
         evaluator=mrr,
     ),
@@ -229,13 +241,13 @@ METRICS = [
         "NDCG@K",
         "retrieval",
         f"归一化折损累积增益，奖励相关结果排在更前位置（Top-{DEFAULT_K}，二值相关性）。",
-        ("chunks.chunk_id", "chunks.rank"),
+        ("chunks",),
         any_of_fields=_RELEVANCE_ANY_OF,
         evaluator=ndcg_at_k,
     ),
     MetricSpec(
         "context_relevance",
-        "上下文相关性",
+        "查询词元覆盖率（词面）",
         "retrieval",
         "问题词元在检索上下文中的覆盖率；词面基线，不替代语义判断。",
         ("query", "chunks.content"),

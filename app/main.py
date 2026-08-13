@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from app.evaluation.engine import evaluate_dataset_async
 from app.evaluation.providers import EvaluationContext
 from app.evaluation.registry import registry
+from app.rag_adapters import adapter_registry
+from app.rag_adapters.base import RAGAdapter
 from app.schemas import RunRequest
 from app.services.datasets import (
     DatasetError,
@@ -16,6 +18,7 @@ from app.services.datasets import (
     detect_present_fields,
     parse_dataset,
 )
+from app.services.invocations import invoke_cases, project_cases_for_adapter
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -41,19 +44,56 @@ def metrics() -> list[dict[str, object]]:
     return registry.describe_for([], evaluation_context)
 
 
+@app.get("/api/rag-adapters")
+def rag_adapters() -> list[dict[str, object]]:
+    return adapter_registry.describe()
+
+
+@app.post("/api/rag-adapters/{name}/healthcheck")
+async def rag_adapter_healthcheck(name: str) -> dict[str, object]:
+    adapter = _get_adapter(name)
+    return (await adapter.healthcheck()).model_dump()
+
+
+def _get_adapter(name: str) -> RAGAdapter:
+    adapter = adapter_registry.get(name)
+    if adapter is None:
+        raise HTTPException(status_code=422, detail=f"未知 RAG Adapter：{name}")
+    if not adapter.is_available():
+        raise HTTPException(
+            status_code=422,
+            detail=f"RAG Adapter 尚不可用：{name}",
+        )
+    return adapter
+
+
 @app.post("/api/datasets/upload")
-async def upload_dataset(file: UploadFile = File(...)) -> dict[str, object]:
+async def upload_dataset(
+    file: UploadFile = File(...), adapter_name: str | None = None
+) -> dict[str, object]:
     try:
         cases = parse_dataset(file.filename or "dataset.jsonl", await file.read())
     except DatasetError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     dataset_id = dataset_store.add(file.filename or "dataset.jsonl", cases)
+    effective_cases = cases
+    adapter_description = None
+    if adapter_name:
+        adapter = _get_adapter(adapter_name)
+        effective_cases = project_cases_for_adapter(cases, adapter.capabilities)
+        adapter_description = {
+            "name": adapter.name,
+            "label": adapter.label,
+            "capabilities": adapter.capabilities.model_dump(),
+        }
     return {
         "dataset_id": dataset_id,
         "filename": file.filename,
         "sample_count": len(cases),
         "detected_fields": detect_present_fields(cases),
-        "metrics": registry.describe_for(cases, evaluation_context),
+        "effective_fields": detect_present_fields(effective_cases),
+        "adapter": adapter_description,
+        "metrics": registry.describe_for(effective_cases, evaluation_context),
     }
 
 
@@ -62,11 +102,24 @@ async def run_evaluation(request: RunRequest) -> dict[str, object]:
     dataset = dataset_store.get(request.dataset_id)
     if dataset is None:
         raise HTTPException(status_code=404, detail="数据集不存在或服务已重启，请重新上传。")
+    cases = dataset.cases
+    invocations: list[dict[str, object]] = []
+    if request.adapter_name and request.metric_names != []:
+        adapter = _get_adapter(request.adapter_name)
+        cases, invocations = await invoke_cases(
+            cases,
+            adapter,
+            max_concurrency=evaluation_context.max_concurrency,
+            timeout_seconds=evaluation_context.timeout_seconds,
+        )
     try:
-        return await evaluate_dataset_async(
-            dataset.cases,
+        result = await evaluate_dataset_async(
+            cases,
             request.metric_names,
             context=evaluation_context,
         )
+        result["adapter_name"] = request.adapter_name
+        result["invocations"] = invocations
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

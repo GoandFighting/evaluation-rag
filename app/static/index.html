@@ -10,8 +10,8 @@
     <header class="hero">
       <div>
         <p class="eyebrow">RAG EVALUATION WORKBENCH</p>
-        <h1>从数据字段开始，选择真正可执行的评测</h1>
-        <p class="lead">上传 JSON 或 JSONL，系统自动识别样本字段，并按端到端、检索、生成三个维度给出指标可用性。</p>
+        <h1>从黄金集到评测结果，一键运行已实现指标</h1>
+        <p class="lead">上传 JSON 或 JSONL，系统自动识别样本字段，并按端到端、检索、生成三个维度完成评测。</p>
       </div>
       <span class="version">MVP · v0.1</span>
     </header>
@@ -22,25 +22,29 @@
           <span class="step">01</span>
           <div><h2>上传评测数据</h2><p>支持 JSON / JSONL，单文件不超过 20 MB</p></div>
         </div>
+        <div class="target-picker">
+          <label for="adapter-select">回答来源</label>
+          <select id="adapter-select">
+            <option value="">使用文件中已有的 answer / chunks</option>
+          </select>
+          <small id="adapter-description">离线模式不会调用外部 RAG。</small>
+        </div>
         <label class="drop-zone" id="drop-zone">
           <input id="file-input" type="file" accept=".json,.jsonl,application/json" />
           <span class="upload-icon">↑</span>
           <strong id="file-label">点击选择或拖入数据文件</strong>
           <small>推荐包含 query、chunks、answer；参考答案和标注字段可解锁更多指标</small>
         </label>
-        <div class="actions">
-          <button id="upload-button" class="button secondary" disabled>解析文件</button>
-          <div id="upload-status" class="status-text" aria-live="polite"></div>
-        </div>
+        <div id="upload-status" class="status-text upload-status" aria-live="polite"></div>
       </section>
 
       <section class="panel hidden" id="metrics-section">
         <div class="section-heading">
           <span class="step">02</span>
-          <div><h2>确认评测范围</h2><p id="dataset-summary"></p></div>
+          <div><h2>开始评测</h2><p id="dataset-summary"></p></div>
         </div>
         <div id="field-list" class="field-list"></div>
-        <div id="metric-groups"></div>
+        <div id="automatic-metric-summary" class="automatic-metrics"></div>
         <div class="actions right">
           <button id="run-button" class="button primary">开始评测</button>
           <div id="run-status" class="status-text" aria-live="polite"></div>
@@ -52,26 +56,34 @@
           <span class="step">03</span>
           <div><h2>评测结果</h2><p>先看维度汇总，再下钻到每条样本的指标理由</p></div>
         </div>
+        <div id="invocation-summary"></div>
         <div id="result-summary"></div>
-        <details class="details" open>
-          <summary>样本级明细</summary>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>样本</th><th>维度</th><th>指标</th><th>状态</th><th>得分</th><th>说明</th></tr></thead>
-              <tbody id="result-rows"></tbody>
-            </table>
-          </div>
-        </details>
       </section>
     </main>
 
-    <template id="metric-card-template">
-      <label class="metric-card">
-        <input type="checkbox" />
-        <span class="metric-copy"><strong></strong><small class="description"></small><small class="requirements"></small></span>
-        <span class="metric-state"></span>
-      </label>
-    </template>
+    <dialog id="metric-dashboard" class="metric-dashboard">
+      <div class="dashboard-shell">
+        <header class="dashboard-header">
+          <div>
+            <p id="dashboard-dimension" class="eyebrow"></p>
+            <h2 id="dashboard-title"></h2>
+            <p id="dashboard-description"></p>
+          </div>
+          <button id="dashboard-close" class="dashboard-close" type="button" aria-label="关闭指标明细">×</button>
+        </header>
+        <section class="dashboard-score">
+          <span>平均得分</span>
+          <strong id="dashboard-average">—</strong>
+          <div class="bar"><i id="dashboard-bar"></i></div>
+        </section>
+        <div class="table-wrap dashboard-table">
+          <table>
+            <thead><tr><th>样本</th><th>状态</th><th>得分</th><th>说明</th></tr></thead>
+            <tbody id="dashboard-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </dialog>
     <script src="/static/app.js" defer></script>
   </body>
 </html>

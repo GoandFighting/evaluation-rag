@@ -9,6 +9,7 @@ description = "Field-aware RAG evaluation workbench"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
   "pydantic>=2.11,<3",
   "python-multipart>=0.0.20,<1",
   "uvicorn[standard]>=0.35,<1",
@@ -16,7 +17,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "httpx>=0.28,<1",
   "pytest>=8.4,<9",
   "pytest-cov>=6.2,<7",
 ]

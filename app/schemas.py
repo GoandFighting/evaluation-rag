@@ -48,3 +48,4 @@ class EvaluationCase(BaseModel):
 class RunRequest(BaseModel):
     dataset_id: str
     metric_names: list[str] | None = None
+    adapter_name: str | None = None

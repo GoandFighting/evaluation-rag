@@ -83,6 +83,11 @@ $env:SMALLRAG_BASE_URL="http://127.0.0.1:8001"
 
 可通过 `.env.example` 中的 `SMALLRAG_TOP_K`、`SMALLRAG_ALPHA`、超时、TLS 和可选上下文上限调整连接。当前应用不会自动加载 `.env`，本地运行前请设置环境变量，或使用进程管理工具注入配置。
 
+批量调用默认最多同时向目标 RAG 发送 2 个请求，可用
+`TARGET_RAG_MAX_CONCURRENCY` 调整；`TARGET_RAG_TIMEOUT_SECONDS` 控制单条样本的外层超时。
+建议目标服务容量不明确时保持并发为 1 或 2。SmallRAG 返回结构化 502 时，调用明细会显示
+具体的 `knowledge_base_upstream_error` 或 `model_upstream_error`，以及对应 request ID。
+
 ## 并行开发约定
 
 - `app/evaluation/base.py` 和 `app/schemas.py` 是共享契约，修改前需要两位开发者确认。

@@ -114,8 +114,9 @@ class SmallRAGAdapter:
         except httpx.TimeoutException as exc:
             raise AdapterExecutionError("SmallRAG 请求超时。") from exc
         except httpx.HTTPStatusError as exc:
+            detail = self._error_detail(exc.response)
             raise AdapterExecutionError(
-                f"SmallRAG 返回 HTTP {exc.response.status_code}。"
+                f"SmallRAG 返回 HTTP {exc.response.status_code}：{detail}"
             ) from exc
         except httpx.HTTPError as exc:
             raise AdapterExecutionError(f"SmallRAG 请求失败：{exc}") from exc
@@ -242,6 +243,27 @@ class SmallRAGAdapter:
     def _health_message(response: httpx.Response, data: dict[str, Any]) -> str:
         status = data.get("status") or "unknown"
         return f"SmallRAG 未就绪（HTTP {response.status_code}，status={status}）。"
+
+    @staticmethod
+    def _error_detail(response: httpx.Response) -> str:
+        try:
+            data = response.json()
+        except ValueError:
+            return "响应正文不是有效 JSON。"
+        if not isinstance(data, dict):
+            return "响应正文格式无效。"
+        error = data.get("error")
+        if isinstance(error, dict):
+            code = error.get("code")
+            message = error.get("message")
+            request_id = error.get("request_id")
+            parts = [str(value) for value in (code, message) if value]
+            detail = " - ".join(parts) or "未知上游错误"
+            if request_id:
+                detail += f"（request_id={request_id}）"
+            return detail[:600]
+        detail = data.get("detail") or data.get("message") or "未知上游错误"
+        return str(detail)[:600]
 
     @staticmethod
     def _integer_or_default(value: Any, default: int) -> int:

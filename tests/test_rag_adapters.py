@@ -2,12 +2,14 @@ import asyncio
 import json
 
 import httpx
+import pytest
 
 from app.rag_adapters.base import RAGRequest
 from app.rag_adapters.confluence_skill import (
     ConfluenceSkillAdapter,
     ConfluenceSkillConfig,
 )
+from app.rag_adapters.errors import AdapterExecutionError
 from app.rag_adapters.smallrag import SmallRAGAdapter, SmallRAGConfig
 from app.schemas import EvaluationCase
 from app.services.invocations import invoke_cases
@@ -177,3 +179,39 @@ def test_smallrag_adapter_returns_generated_answer_and_full_contexts():
     assert output.trace_id == "smallrag-trace-1"
     assert output.latency_ms == 60
     assert output.token_usage["input_tokens"] == 120
+
+
+def test_smallrag_adapter_exposes_structured_upstream_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            502,
+            json={
+                "error": {
+                    "code": "model_upstream_error",
+                    "message": "Model gateway returned HTTP 429: rate limited",
+                    "request_id": "smallrag-failed-request",
+                }
+            },
+        )
+
+    adapter = SmallRAGAdapter(
+        SmallRAGConfig(base_url="http://smallrag.test"),
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(AdapterExecutionError) as exc_info:
+        asyncio.run(
+            adapter.invoke(
+                RAGRequest(
+                    request_id="evaluation-request-2",
+                    sample_id="sample-2",
+                    query="问题",
+                    user_id="evaluator",
+                )
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "model_upstream_error" in message
+    assert "HTTP 429" in message
+    assert "smallrag-failed-request" in message

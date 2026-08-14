@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -27,6 +28,13 @@ STATIC_DIR = BASE_DIR / "static"
 app = FastAPI(title="RAG Evaluation Workbench", version="0.1.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 evaluation_context = EvaluationContext()
+target_rag_max_concurrency = int(os.getenv("TARGET_RAG_MAX_CONCURRENCY", "2"))
+target_rag_timeout_seconds = float(os.getenv("TARGET_RAG_TIMEOUT_SECONDS", "120"))
+
+if not 1 <= target_rag_max_concurrency <= 32:
+    raise ValueError("TARGET_RAG_MAX_CONCURRENCY 必须在 1 到 32 之间。")
+if not 1 <= target_rag_timeout_seconds <= 600:
+    raise ValueError("TARGET_RAG_TIMEOUT_SECONDS 必须在 1 到 600 之间。")
 
 
 @app.get("/", include_in_schema=False)
@@ -109,8 +117,8 @@ async def run_evaluation(request: RunRequest) -> dict[str, object]:
         cases, invocations = await invoke_cases(
             cases,
             adapter,
-            max_concurrency=evaluation_context.max_concurrency,
-            timeout_seconds=evaluation_context.timeout_seconds,
+            max_concurrency=target_rag_max_concurrency,
+            timeout_seconds=target_rag_timeout_seconds,
         )
     try:
         result = await evaluate_dataset_async(

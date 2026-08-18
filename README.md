@@ -48,6 +48,33 @@ pytest
 - `GET /api/metrics`：获取三大维度的指标契约。
 - `GET /api/rag-adapters`：获取可选 RAG 目标及其输出能力。
 - `POST /api/rag-adapters/{name}/healthcheck`：检查 Adapter 与上游服务连通性。
+- `GET /api/model-providers`：查看 LLM Judge 与 Embedding Provider 配置状态。
+- `POST /api/model-providers/{name}/healthcheck`：检查模型健康状态及模型列表，`name` 为 `llm_judge` 或 `embedding`。
+- `POST /api/model-providers/{name}/probe`：实际调用一次模型核心接口，确认推理链路可用。
+
+## 评测模型 Provider
+
+系统通过 OpenAI 兼容 HTTP 接口连接 Qwen3-8B Judge 和 Qwen3 Embedding。Provider 只有在配置对应 `BASE_URL` 时才会注入 `EvaluationContext`；未配置时，依赖该能力的指标保持 `not_configured`。
+
+同机部署可设置：
+
+```bash
+export EVAL_LLM_BASE_URL=http://127.0.0.1:8000
+export EVAL_LLM_MODEL=qwen3-8b
+export EVAL_EMBEDDING_BASE_URL=http://127.0.0.1:8080
+export EVAL_EMBEDDING_MODEL=qwen3-embedding-0.6b
+```
+
+启动评测系统后验证项目进程到模型服务的连接：
+
+```bash
+curl -X POST http://127.0.0.1:8002/api/model-providers/llm_judge/healthcheck
+curl -X POST http://127.0.0.1:8002/api/model-providers/embedding/healthcheck
+curl -X POST http://127.0.0.1:8002/api/model-providers/llm_judge/probe
+curl -X POST http://127.0.0.1:8002/api/model-providers/embedding/probe
+```
+
+健康检查会依次访问模型服务的 `/health` 和 `/v1/models`，并确认配置的模型名已经加载；探针会实际请求 `/v1/chat/completions` 或 `/v1/embeddings`。具体超时、TLS、API Key、Judge 最大输出长度和评测并发参数见 `.env.example`。
 
 ## Confluence KB Skill Adapter
 
@@ -104,5 +131,5 @@ $env:SMALLRAG_BASE_URL="http://127.0.0.1:8001"
 - 数据集暂存在进程内，服务重启后需重新上传；后续可替换为数据库或对象存储。
 - 规则指标同步计算，模型指标通过异步 Provider 并发执行；当前仍是请求内评测，大数据集需要任务队列。
 - 回答相关性目前是可解释的词面基线，不代表语义正确性。
-- 检索和生成指标已实现纯编码（词面/结构）基线；语义类指标（嵌入/LLM Judge）已声明能力契约，待部署模型后注入 `EvaluationContext`。
-- LLM Judge、Embedding Provider 尚未接入。
+- 检索和生成指标已实现纯编码（词面/结构）基线；语义类指标已声明能力契约，后续可直接调用已注入的 Embedding/LLM Judge Provider。
+- LLM Judge、Embedding Provider 已接入，具体模型指标仍按各模块计划逐项实现。

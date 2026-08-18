@@ -3,11 +3,12 @@ import json
 import httpx
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, evaluation_context
 from app.rag_adapters import adapter_registry
 
 
-def test_metrics_expose_runtime_capabilities():
+def test_metrics_expose_runtime_capabilities(monkeypatch):
+    monkeypatch.setattr(evaluation_context, "embedding_provider", None)
     with TestClient(app) as client:
         response = client.get("/api/metrics")
 
@@ -18,6 +19,20 @@ def test_metrics_expose_runtime_capabilities():
     assert semantic["missing_capabilities"] == ["embedding"]
     assert semantic["configured"] is False
     assert semantic["runnable"] is False
+
+
+def test_model_provider_api_exposes_configuration_state():
+    with TestClient(app) as client:
+        response = client.get("/api/model-providers")
+
+    assert response.status_code == 200
+    providers = {item["name"]: item for item in response.json()}
+    assert providers["llm_judge"]["configured"] is (
+        evaluation_context.llm_judge is not None
+    )
+    assert providers["embedding"]["configured"] is (
+        evaluation_context.embedding_provider is not None
+    )
 
 
 def test_smallrag_adapter_is_exposed_to_the_frontend():

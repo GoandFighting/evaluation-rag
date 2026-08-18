@@ -8,6 +8,11 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.evaluation.engine import evaluate_dataset_async
+from app.evaluation.model_providers import (
+    ModelProviderError,
+    build_evaluation_context_from_environment,
+    describe_model_providers,
+)
 from app.evaluation.providers import EvaluationContext
 from app.evaluation.registry import registry
 from app.rag_adapters import adapter_registry
@@ -27,7 +32,7 @@ STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="RAG Evaluation Workbench", version="0.1.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-evaluation_context = EvaluationContext()
+evaluation_context: EvaluationContext = build_evaluation_context_from_environment()
 target_rag_max_concurrency = int(os.getenv("TARGET_RAG_MAX_CONCURRENCY", "2"))
 target_rag_timeout_seconds = float(os.getenv("TARGET_RAG_TIMEOUT_SECONDS", "120"))
 
@@ -50,6 +55,45 @@ def health() -> dict[str, str]:
 @app.get("/api/metrics")
 def metrics() -> list[dict[str, object]]:
     return registry.describe_for([], evaluation_context)
+
+
+@app.get("/api/model-providers")
+def model_providers() -> list[dict[str, object]]:
+    return describe_model_providers(evaluation_context)
+
+
+@app.post("/api/model-providers/{name}/healthcheck")
+async def model_provider_healthcheck(name: str) -> dict[str, object]:
+    provider = _get_model_provider(name)
+    healthcheck = getattr(provider, "healthcheck", None)
+    if not callable(healthcheck):
+        raise HTTPException(status_code=500, detail=f"Provider 不支持健康检查：{name}")
+    return (await healthcheck()).model_dump()
+
+
+@app.post("/api/model-providers/{name}/probe")
+async def model_provider_probe(name: str) -> dict[str, object]:
+    provider = _get_model_provider(name)
+    probe = getattr(provider, "probe", None)
+    if not callable(probe):
+        raise HTTPException(status_code=500, detail=f"Provider 不支持调用探针：{name}")
+    try:
+        return await probe()
+    except ModelProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+def _get_model_provider(name: str) -> object:
+    providers = {
+        "llm_judge": evaluation_context.llm_judge,
+        "embedding": evaluation_context.embedding_provider,
+    }
+    if name not in providers:
+        raise HTTPException(status_code=422, detail=f"未知模型 Provider：{name}")
+    provider = providers[name]
+    if provider is None:
+        raise HTTPException(status_code=422, detail=f"模型 Provider 尚未配置：{name}")
+    return provider
 
 
 @app.get("/api/rag-adapters")

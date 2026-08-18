@@ -76,6 +76,10 @@ curl -X POST http://127.0.0.1:8002/api/model-providers/embedding/probe
 
 健康检查会依次访问模型服务的 `/health` 和 `/v1/models`，并确认配置的模型名已经加载；探针会实际请求 `/v1/chat/completions` 或 `/v1/embeddings`。具体超时、TLS、API Key、Judge 最大输出长度和评测并发参数见 `.env.example`。
 
+端到端模块现已提供两类模型指标：Embedding 用于 `answer_relevance_semantic` 和 `semantic_similarity`；LLM Judge 用于 `answer_relevance_llm`、`answer_correctness`、`completeness_llm` 和 `refusal_quality_llm`。规则版相关性、Exact Match/F1、关键点完整性、格式合规和拒答判断继续保留，便于对照和低成本筛查。
+
+前端全选时，每条字段齐全的样本最多触发 4 次 Judge 和 2 次 Embedding 请求。首次真实数据测试建议设置 `EVAL_MODEL_MAX_CONCURRENCY=2`，观察模型吞吐和超时后再逐步提高。
+
 ## Confluence KB Skill Adapter
 
 前端选择 `Confluence KB Skill` 后，上传的黄金集只需包含 `query` 和相应人工标注字段（如 `reference_answer`）。运行评测时，系统逐条调用本机 `confluence-kb-query` Skill，并将检索结果标准化为 `answer`、`chunks` 和 `citations`。默认 Skill 目录为 `%USERPROFILE%\.zcode\skills\confluence-kb-query`。

@@ -66,7 +66,7 @@ MetricSpec(
 {"dataset_id":"uuid","metric_names":["token_f1"]}
 ```
 
-响应包含指标汇总 `summary` 和样本明细 `results`。状态值为：
+响应包含指标汇总 `summary`、模块综合分 `module_scores` 和样本明细 `results`。端到端综合分只使用 `success_count > 0` 且存在 `average` 的指标，并在本次成功指标之间重新归一化默认权重。状态值为：
 
 - `success`：指标成功执行；
 - `not_applicable`：样本缺少指标字段；

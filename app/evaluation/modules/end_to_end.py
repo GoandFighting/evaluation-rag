@@ -36,17 +36,6 @@ def answer_relevance(case: EvaluationCase) -> MetricOutcome:
     )
 
 
-def exact_match(case: EvaluationCase) -> MetricOutcome:
-    actual = " ".join(_tokens(case.answer))
-    expected = " ".join(_tokens(case.reference_answer))
-    passed = actual == expected
-    return MetricOutcome(
-        score=1.0 if passed else 0.0,
-        passed=passed,
-        reason="回答与参考答案规范化后完全一致。" if passed else "回答与参考答案不完全一致。",
-    )
-
-
 def token_f1(case: EvaluationCase) -> MetricOutcome:
     actual = Counter(_tokens(case.answer))
     expected = Counter(_tokens(case.reference_answer))
@@ -321,14 +310,6 @@ METRICS = [
         ("answer", "reference_answer"),
         async_evaluator=semantic_similarity,
         required_capabilities=("embedding",),
-    ),
-    MetricSpec(
-        "exact_match",
-        "完全匹配",
-        "end_to_end",
-        "回答与参考答案规范化后的完全匹配。",
-        ("answer", "reference_answer"),
-        exact_match,
     ),
     MetricSpec(
         "token_f1",

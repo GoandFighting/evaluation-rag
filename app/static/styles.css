@@ -59,6 +59,14 @@ code { padding: 2px 6px; border-radius: 5px; background: #e8ebe5; font: 12px/1.5
 .dimension-note { display: flex; gap: 10px; align-items: baseline; margin: 0 0 12px; padding: 11px 13px; border-left: 3px solid var(--amber); border-radius: 7px; background: var(--amber-soft); color: #6f4b11; }
 .dimension-note span { color: #7b6542; }
 .result-dimension { margin-top: 24px; }
+.module-score-card { margin-bottom: 14px; padding: 18px 20px; border: 1px solid #82b59c; border-radius: 14px; background: linear-gradient(135deg, #edf8f1, #fffdf8); }
+.module-score-card > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.module-score-card > div:first-child span { font-size: 17px; font-weight: 800; }
+.module-score-card > div:first-child strong { color: var(--green); font-size: 30px; }
+.module-score-card > small { color: var(--muted); }
+.module-score-card.is-empty { border-color: var(--line); background: #f4f5f0; }
+.module-score-components { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.module-score-components span { padding: 3px 8px; border-radius: 99px; background: rgba(255, 255, 255, .8); color: var(--green); font-size: 11px; font-weight: 700; }
 .invocation-card { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 20px; padding: 13px 15px; border: 1px solid #abd0bd; border-radius: 10px; background: var(--green-soft); color: var(--green); }
 .invocation-details { margin-top: 0; }
 .invocation-details details summary { margin-bottom: 6px; font-size: 12px; }

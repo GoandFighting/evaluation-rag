@@ -19,6 +19,7 @@ def make_case(**overrides):
 def test_registry_reports_per_metric_field_coverage():
     descriptions = {item["name"]: item for item in registry.describe_for([make_case()])}
 
+    assert "exact_match" not in descriptions
     assert descriptions["token_f1"]["runnable"] is True
     assert descriptions["format_compliance"]["runnable"] is False
     assert descriptions["faithfulness"]["implemented"] is True
@@ -27,16 +28,18 @@ def test_registry_reports_per_metric_field_coverage():
 
 def test_end_to_end_metrics_return_summary_and_details():
     result = evaluate_dataset(
-        [make_case()], ["exact_match", "token_f1", "key_point_completeness"]
+        [make_case()], ["token_f1", "key_point_completeness"]
     )
 
-    assert len(result["summary"]) == 3
+    assert len(result["summary"]) == 2
     assert all(item["average"] == 1.0 for item in result["summary"])
     assert all(item["status"] == "success" for item in result["results"])
+    assert result["module_scores"][0]["score"] == 1.0
 
 
 def test_missing_fields_are_not_applicable():
-    result = evaluate_dataset([make_case(reference_answer=None)], ["exact_match"])
+    result = evaluate_dataset([make_case(reference_answer=None)], ["token_f1"])
 
     assert result["results"][0]["status"] == "not_applicable"
     assert result["summary"][0]["average"] is None
+    assert result["module_scores"][0]["score"] is None

@@ -47,6 +47,7 @@ class LLMJudgeConfig:
     verify_ssl: bool = True
     max_tokens: int = 1024
     temperature: float = 0.0
+    enable_thinking: bool = False
 
     @classmethod
     def from_environment(cls) -> "LLMJudgeConfig | None":
@@ -61,6 +62,9 @@ class LLMJudgeConfig:
             verify_ssl=_environment_bool("EVAL_LLM_VERIFY_SSL"),
             max_tokens=int(os.getenv("EVAL_LLM_MAX_TOKENS", "1024")),
             temperature=float(os.getenv("EVAL_LLM_TEMPERATURE", "0")),
+            enable_thinking=_environment_bool(
+                "EVAL_LLM_ENABLE_THINKING", default=False
+            ),
         )
 
 
@@ -236,20 +240,28 @@ class OpenAICompatibleLLMJudge(_OpenAICompatibleProvider):
         )
         self.config = config
 
-    async def judge(self, prompt: str, **kwargs: Any) -> str:
+    async def _complete(
+        self, prompt: str, **kwargs: Any
+    ) -> tuple[str, str | None]:
         if not prompt.strip():
             raise ValueError("Judge prompt 不能为空。")
         system_prompt = kwargs.pop("system_prompt", None)
         messages: list[dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": str(system_prompt)})
-        messages.append({"role": "user", "content": prompt})
+        user_prompt = prompt.strip()
+        if not self.config.enable_thinking and not user_prompt.endswith("/no_think"):
+            user_prompt = f"{user_prompt}\n\n/no_think"
+        messages.append({"role": "user", "content": user_prompt})
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "max_tokens": kwargs.pop("max_tokens", self.config.max_tokens),
             "temperature": kwargs.pop("temperature", self.config.temperature),
             "stream": False,
+            "chat_template_kwargs": {
+                "enable_thinking": self.config.enable_thinking
+            },
         }
         payload.update(kwargs)
         data = await self._post_json("/v1/chat/completions", payload)
@@ -261,10 +273,17 @@ class OpenAICompatibleLLMJudge(_OpenAICompatibleProvider):
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, str) or not content.strip():
             raise ModelProviderError("LLM Judge 响应缺少有效的 message.content。")
-        return content.strip()
+        finish_reason = first.get("finish_reason") if isinstance(first, dict) else None
+        return content.strip(), (
+            str(finish_reason) if finish_reason is not None else None
+        )
 
-    async def judge_json(self, prompt: str, **kwargs: Any) -> dict[str, Any]:
-        content = await self.judge(prompt, **kwargs)
+    async def judge(self, prompt: str, **kwargs: Any) -> str:
+        content, _ = await self._complete(prompt, **kwargs)
+        return content
+
+    @staticmethod
+    def _extract_json_object(content: str) -> dict[str, Any] | None:
         decoder = json.JSONDecoder()
         for position, character in enumerate(content):
             if character != "{":
@@ -275,7 +294,30 @@ class OpenAICompatibleLLMJudge(_OpenAICompatibleProvider):
                 continue
             if isinstance(value, dict):
                 return value
-        raise ModelProviderError("LLM Judge 未返回有效的 JSON 对象。")
+        return None
+
+    async def judge_json(self, prompt: str, **kwargs: Any) -> dict[str, Any]:
+        content, finish_reason = await self._complete(prompt, **kwargs)
+        parsed = self._extract_json_object(content)
+        if parsed is not None:
+            return parsed
+
+        retry_prompt = (
+            f"{prompt.rstrip()}\n\n"
+            "上一次响应不是合法 JSON。请重新完成同一评分任务，只输出一个完整的 "
+            "JSON 对象，不要输出思考过程、Markdown 或其他文字。"
+        )
+        retry_content, retry_finish_reason = await self._complete(
+            retry_prompt, **kwargs
+        )
+        parsed = self._extract_json_object(retry_content)
+        if parsed is not None:
+            return parsed
+        raise ModelProviderError(
+            "LLM Judge 连续两次未返回有效的 JSON 对象"
+            f"（finish_reason: {finish_reason or 'unknown'} -> "
+            f"{retry_finish_reason or 'unknown'}）。"
+        )
 
     async def probe(self) -> dict[str, Any]:
         output = await self.judge(

@@ -32,7 +32,8 @@ def _model_service_handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         assert payload["model"] == "qwen3-8b"
         assert payload["messages"][-1]["role"] == "user"
-        assert payload["messages"][-1]["content"]
+        assert payload["messages"][-1]["content"].endswith("/no_think")
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
         return httpx.Response(
             200,
             json={
@@ -78,6 +79,63 @@ def test_llm_judge_calls_openai_compatible_endpoint_and_parses_json():
     result = asyncio.run(provider.judge_json("判断回答是否正确"))
 
     assert result == {"score": 1, "reason": "正确"}
+
+
+def test_llm_judge_retries_once_after_invalid_json():
+    request_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        content = (
+            "<think>输出被截断"
+            if request_count == 1
+            else '{"score": 0.8, "passed": true, "reason": "重试成功"}'
+        )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "length" if request_count == 1 else "stop",
+                        "message": {"content": content},
+                    }
+                ]
+            },
+        )
+
+    provider = OpenAICompatibleLLMJudge(
+        LLMJudgeConfig(base_url="http://llm.test"),
+        transport=httpx.MockTransport(handler),
+    )
+
+    result = asyncio.run(provider.judge_json("判断回答是否正确"))
+
+    assert request_count == 2
+    assert result["score"] == 0.8
+
+
+def test_llm_judge_reports_finish_reasons_after_retry_failure():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "length",
+                        "message": {"content": "<think>仍未完成"},
+                    }
+                ]
+            },
+        )
+
+    provider = OpenAICompatibleLLMJudge(
+        LLMJudgeConfig(base_url="http://llm.test"),
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(ModelProviderError, match="length -> length"):
+        asyncio.run(provider.judge_json("判断回答是否正确"))
 
 
 def test_embedding_provider_preserves_input_order_and_cosine_similarity():

@@ -71,7 +71,7 @@ def test_upload_then_run_evaluation():
 
         run = client.post(
             "/api/evaluations/run",
-            json={"dataset_id": body["dataset_id"], "metric_names": ["exact_match"]},
+            json={"dataset_id": body["dataset_id"], "metric_names": ["token_f1"]},
         )
         assert run.status_code == 200
         assert run.json()["summary"][0]["average"] == 1.0
@@ -157,7 +157,7 @@ def test_confluence_adapter_upload_and_run(monkeypatch):
             "/api/evaluations/run",
             json={
                 "dataset_id": upload.json()["dataset_id"],
-                "metric_names": ["exact_match"],
+                "metric_names": ["token_f1"],
                 "adapter_name": "confluence_skill",
             },
         )
@@ -223,7 +223,7 @@ def test_smallrag_adapter_runs_through_the_evaluation_api(monkeypatch):
             "/api/evaluations/run",
             json={
                 "dataset_id": upload.json()["dataset_id"],
-                "metric_names": ["exact_match", "context_relevance"],
+                "metric_names": ["token_f1", "context_relevance"],
                 "adapter_name": "smallrag",
             },
         )
@@ -236,7 +236,7 @@ def test_smallrag_adapter_runs_through_the_evaluation_api(monkeypatch):
     assert run.json()["invocations"][0]["trace_id"] == "smallrag-api-trace"
     assert run.json()["invocations"][0]["token_usage"]["input_tokens"] == 100
     assert run.json()["invocations"][0]["chunks"][0]["content"].startswith("正式员工")
-    exact_match = next(
-        item for item in run.json()["summary"] if item["metric_name"] == "exact_match"
+    token_f1 = next(
+        item for item in run.json()["summary"] if item["metric_name"] == "token_f1"
     )
-    assert exact_match["average"] == 1.0
+    assert token_f1["average"] == 1.0

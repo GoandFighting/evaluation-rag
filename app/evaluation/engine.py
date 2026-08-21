@@ -7,6 +7,7 @@ from typing import Any
 from app.evaluation.base import MetricSpec, has_field
 from app.evaluation.providers import EvaluationContext
 from app.evaluation.registry import DIMENSION_LABELS, MetricRegistry, registry
+from app.evaluation.scoring import calculate_module_scores
 from app.schemas import EvaluationCase
 
 
@@ -178,8 +179,10 @@ async def evaluate_dataset_async(
             tasks.append(_evaluate_one(case, metric, runtime, semaphore))
 
     results = list(await asyncio.gather(*tasks)) if tasks else []
+    summary = _summarize(results)
     return {
-        "summary": _summarize(results),
+        "summary": summary,
+        "module_scores": calculate_module_scores(summary),
         "results": results,
         "sample_count": len(cases),
     }

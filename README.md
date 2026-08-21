@@ -74,9 +74,9 @@ curl -X POST http://127.0.0.1:8002/api/model-providers/llm_judge/probe
 curl -X POST http://127.0.0.1:8002/api/model-providers/embedding/probe
 ```
 
-健康检查会依次访问模型服务的 `/health` 和 `/v1/models`，并确认配置的模型名已经加载；探针会实际请求 `/v1/chat/completions` 或 `/v1/embeddings`。具体超时、TLS、API Key、Judge 最大输出长度和评测并发参数见 `.env.example`。
+健康检查会依次访问模型服务的 `/health` 和 `/v1/models`，并确认配置的模型名已经加载；探针会实际请求 `/v1/chat/completions` 或 `/v1/embeddings`。具体超时、TLS、API Key、Judge 最大输出长度和评测并发参数见 `.env.example`。Qwen3 Judge 默认通过 `EVAL_LLM_ENABLE_THINKING=false` 关闭思考模式；结构化响应解析失败时自动重试一次。
 
-端到端模块现已提供两类模型指标：Embedding 用于 `answer_relevance_semantic` 和 `semantic_similarity`；LLM Judge 用于 `answer_relevance_llm`、`answer_correctness`、`completeness_llm` 和 `refusal_quality_llm`。规则版相关性、Exact Match/F1、关键点完整性、格式合规和拒答判断继续保留，便于对照和低成本筛查。
+端到端模块现已提供两类模型指标：Embedding 用于 `answer_relevance_semantic` 和 `semantic_similarity`；LLM Judge 用于 `answer_relevance_llm`、`answer_correctness`、`completeness_llm` 和 `refusal_quality_llm`。规则版相关性、词元 F1、关键点完整性、格式合规和拒答判断继续保留，便于对照和低成本筛查。评测响应还会返回 `module_scores`；端到端综合分只纳入成功产出分数的指标，并对这些指标的默认权重重新归一化。
 
 前端全选时，每条字段齐全的样本最多触发 4 次 Judge 和 2 次 Embedding 请求。首次真实数据测试建议设置 `EVAL_MODEL_MAX_CONCURRENCY=2`，观察模型吞吐和超时后再逐步提高。
 

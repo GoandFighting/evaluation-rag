@@ -76,9 +76,9 @@ curl -X POST http://127.0.0.1:8002/api/model-providers/embedding/probe
 
 健康检查会依次访问模型服务的 `/health` 和 `/v1/models`，并确认配置的模型名已经加载；探针会实际请求 `/v1/chat/completions` 或 `/v1/embeddings`。具体超时、TLS、API Key、Judge 最大输出长度和评测并发参数见 `.env.example`。Qwen3 Judge 默认通过 `EVAL_LLM_ENABLE_THINKING=false` 关闭思考模式；结构化响应解析失败时自动重试一次。
 
-端到端模块现已提供两类模型指标：Embedding 用于 `answer_relevance_semantic` 和 `semantic_similarity`；LLM Judge 用于 `answer_relevance_llm`、`answer_correctness`、`completeness_llm` 和 `refusal_quality_llm`。规则版相关性、词元 F1、关键点完整性、格式合规和拒答判断继续保留，便于对照和低成本筛查。评测响应还会返回 `module_scores`；端到端综合分只纳入成功产出分数的指标，并对这些指标的默认权重重新归一化。
+三个模块均已接入评测模型。端到端模块使用 Embedding 计算回答相关性和语义相似度，使用 LLM Judge 评估相关性、正确性、完整性和拒答质量；检索模块使用 Embedding 计算逐片段语义相关性，使用 LLM Judge 计算上下文精确率；生成模块使用 Embedding 计算逐声明语义支持度，使用 LLM Judge 评估忠实度和事实正确性。规则版指标继续保留，便于对照和低成本筛查。评测响应还会为三个模块返回 `module_scores`；每个综合分只纳入成功产出分数的指标，并对这些指标的默认权重重新归一化。
 
-前端全选时，每条字段齐全的样本最多触发 4 次 Judge 和 2 次 Embedding 请求。首次真实数据测试建议设置 `EVAL_MODEL_MAX_CONCURRENCY=2`，观察模型吞吐和超时后再逐步提高。
+前端全选时，每条字段齐全的样本最多触发 7 次 Judge 和 4 次 Embedding 请求。首次真实数据测试建议设置 `EVAL_MODEL_MAX_CONCURRENCY=2`，观察模型吞吐和超时后再逐步提高。
 
 ## Confluence KB Skill Adapter
 
@@ -135,5 +135,5 @@ $env:SMALLRAG_BASE_URL="http://127.0.0.1:8001"
 - 数据集暂存在进程内，服务重启后需重新上传；后续可替换为数据库或对象存储。
 - 规则指标同步计算，模型指标通过异步 Provider 并发执行；当前仍是请求内评测，大数据集需要任务队列。
 - 回答相关性目前是可解释的词面基线，不代表语义正确性。
-- 检索和生成指标已实现纯编码（词面/结构）基线；语义类指标已声明能力契约，后续可直接调用已注入的 Embedding/LLM Judge Provider。
-- LLM Judge、Embedding Provider 已接入，具体模型指标仍按各模块计划逐项实现。
+- 检索和生成指标同时提供纯编码基线和模型指标；模型指标通过已注入的 Embedding/LLM Judge Provider 异步执行。
+- 三个模块分别返回单指标汇总和加权综合分；综合分会排除缺字段、未配置、失败或尚未实现的指标并重新归一化权重。

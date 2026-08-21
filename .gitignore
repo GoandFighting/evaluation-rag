@@ -6,4 +6,7 @@ __pycache__/
 htmlcov/
 .env
 graphify-out/
+RETRIEVAL_GENERATION_EVALUATION_REPORT.md
+uv.lock
+.zcode
 

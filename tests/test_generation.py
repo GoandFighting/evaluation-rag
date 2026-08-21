@@ -1,4 +1,7 @@
-from app.evaluation.engine import evaluate_dataset
+import asyncio
+import math
+
+from app.evaluation.engine import evaluate_dataset, evaluate_dataset_async
 from app.evaluation.modules.generation import (
     citation_completeness,
     citation_correctness,
@@ -6,6 +9,7 @@ from app.evaluation.modules.generation import (
     factual_consistency,
     faithfulness,
 )
+from app.evaluation.providers import EvaluationContext
 from app.schemas import Chunk, EvaluationCase
 
 
@@ -179,13 +183,73 @@ def test_inline_citations_without_citations_array():
     assert all(r["status"] == "success" for r in result["results"])
 
 
-def test_embedding_and_llm_metrics_not_implemented():
+class FakeEmbeddingProvider:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(texts)
+        return [[1.0, 0.0], [1.0, 0.0]]
+
+    def similarity(self, vec_a: list[float], vec_b: list[float]) -> float:
+        numerator = sum(a * b for a, b in zip(vec_a, vec_b, strict=True))
+        norm_a = math.sqrt(sum(value * value for value in vec_a))
+        norm_b = math.sqrt(sum(value * value for value in vec_b))
+        return numerator / (norm_a * norm_b)
+
+
+class FakeGenerationJudge:
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    async def judge(self, prompt: str, **kwargs) -> str:
+        return "unused"
+
+    async def judge_json(self, prompt: str, **kwargs) -> dict:
+        self.prompts.append(prompt)
+        assert "system_prompt" in kwargs
+        return {
+            "score": 0.9,
+            "passed": True,
+            "reason": "回答受到证据支持。",
+            "details": {"supported_claims": ["IOMMU 模式"]},
+        }
+
+
+def test_embedding_and_llm_metrics_are_implemented():
     from app.evaluation.registry import registry
 
-    desc = {m["name"]: m for m in registry.describe_for([make_case()])}
-    assert desc["faithfulness_semantic"]["implemented"] is False
-    assert desc["faithfulness_llm"]["implemented"] is False
-    assert desc["factual_correctness"]["implemented"] is False
+    context = EvaluationContext(
+        embedding_provider=FakeEmbeddingProvider(), llm_judge=FakeGenerationJudge()
+    )
+    case = make_case(reference_answer="RHEL 默认使用 DMA Translation。")
+    desc = {m["name"]: m for m in registry.describe_for([case], context)}
+    assert desc["faithfulness_semantic"]["runnable"] is True
+    assert desc["faithfulness_llm"]["runnable"] is True
+    assert desc["factual_correctness"]["runnable"] is True
+
+
+def test_embedding_and_llm_generation_metrics_run_successfully():
+    embedding = FakeEmbeddingProvider()
+    judge = FakeGenerationJudge()
+    result = asyncio.run(
+        evaluate_dataset_async(
+            [make_case(reference_answer="RHEL 默认使用 DMA Translation。")],
+            ["faithfulness_semantic", "faithfulness_llm", "factual_correctness"],
+            context=EvaluationContext(
+                embedding_provider=embedding,
+                llm_judge=judge,
+            ),
+        )
+    )
+
+    assert all(item["status"] == "success" for item in result["results"])
+    scores = {item["metric_name"]: item["score"] for item in result["results"]}
+    assert scores["faithfulness_semantic"] == 1.0
+    assert scores["faithfulness_llm"] == 0.9
+    assert scores["factual_correctness"] == 0.9
+    assert len(embedding.calls) == 1
+    assert len(judge.prompts) == 2
 
 
 def test_all_generation_metrics_run():

@@ -1,4 +1,7 @@
-from app.evaluation.engine import evaluate_dataset
+import asyncio
+import math
+
+from app.evaluation.engine import evaluate_dataset, evaluate_dataset_async
 from app.evaluation.modules.retrieval import (
     context_relevance,
     hit_rate_at_k,
@@ -7,6 +10,7 @@ from app.evaluation.modules.retrieval import (
     precision_at_k,
     recall_at_k,
 )
+from app.evaluation.providers import EvaluationContext
 from app.schemas import Chunk, EvaluationCase
 
 
@@ -197,12 +201,91 @@ def test_context_relevance_empty_chunks():
     assert outcome.score == 0.0
 
 
-def test_embedding_and_llm_metrics_not_implemented():
+class FakeEmbeddingProvider:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(texts)
+        vectors = [[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+        return vectors[: len(texts)]
+
+    def similarity(self, vec_a: list[float], vec_b: list[float]) -> float:
+        numerator = sum(a * b for a, b in zip(vec_a, vec_b, strict=True))
+        norm_a = math.sqrt(sum(value * value for value in vec_a))
+        norm_b = math.sqrt(sum(value * value for value in vec_b))
+        return numerator / (norm_a * norm_b)
+
+
+class FakeContextJudge:
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    async def judge(self, prompt: str, **kwargs) -> str:
+        return "unused"
+
+    async def judge_json(self, prompt: str, **kwargs) -> dict:
+        self.prompts.append(prompt)
+        assert "system_prompt" in kwargs
+        return {
+            "judgments": [
+                {"index": 1, "relevant": True, "reason": "直接回答问题"},
+                {"index": 2, "relevant": False, "reason": "主题不相关"},
+            ]
+        }
+
+
+def test_embedding_and_llm_metrics_are_implemented():
     from app.evaluation.registry import registry
 
-    desc = {m["name"]: m for m in registry.describe_for([make_case()])}
-    assert desc["context_relevance_semantic"]["implemented"] is False
-    assert desc["context_precision"]["implemented"] is False
+    context = EvaluationContext(
+        embedding_provider=FakeEmbeddingProvider(), llm_judge=FakeContextJudge()
+    )
+    desc = {m["name"]: m for m in registry.describe_for([make_case()], context)}
+    assert desc["context_relevance_semantic"]["runnable"] is True
+    assert desc["context_precision"]["runnable"] is True
+
+
+def test_embedding_and_llm_retrieval_metrics_run_successfully():
+    embedding = FakeEmbeddingProvider()
+    judge = FakeContextJudge()
+    result = asyncio.run(
+        evaluate_dataset_async(
+            [make_case()],
+            ["context_relevance_semantic", "context_precision"],
+            context=EvaluationContext(
+                embedding_provider=embedding,
+                llm_judge=judge,
+            ),
+        )
+    )
+
+    assert all(item["status"] == "success" for item in result["results"])
+    scores = {item["metric_name"]: item["score"] for item in result["results"]}
+    assert scores["context_relevance_semantic"] == 0.5
+    assert scores["context_precision"] == 1.0
+    assert len(embedding.calls) == 1
+    assert len(judge.prompts) == 1
+
+
+def test_semantic_relevance_counts_empty_chunks_as_zero_without_calling_provider_for_them():
+    embedding = FakeEmbeddingProvider()
+    case = make_case(
+        chunks=[
+            Chunk(chunk_id="c1", content="RHEL IOMMU", rank=1),
+            Chunk(chunk_id="c2", content="", rank=2),
+        ]
+    )
+    result = asyncio.run(
+        evaluate_dataset_async(
+            [case],
+            ["context_relevance_semantic"],
+            context=EvaluationContext(embedding_provider=embedding),
+        )
+    )
+
+    assert result["results"][0]["score"] == 0.5
+    assert len(embedding.calls[0]) == 2  # query + one non-empty chunk
 
 
 def test_all_retrieval_metrics_run_on_golden_format():

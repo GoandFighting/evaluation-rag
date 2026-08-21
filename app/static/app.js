@@ -11,6 +11,7 @@ const state = {
   results: [],
 };
 const dimensions = ["end_to_end", "retrieval", "generation"];
+const hiddenMetricNames = new Set(["citation_correctness", "citation_completeness"]);
 
 const fileInput = document.querySelector("#file-input");
 const fileLabel = document.querySelector("#file-label");
@@ -117,7 +118,7 @@ async function uploadSelectedFile() {
   } finally {
     if (sequence === state.uploadSequence) {
       dropZone.classList.remove("is-uploading");
-      runButton.disabled = !state.metrics.some((metric) => metric.implemented);
+      runButton.disabled = !state.metrics.some((metric) => metric.implemented && !hiddenMetricNames.has(metric.name));
     }
   }
 }
@@ -169,7 +170,9 @@ function hasDraggedFiles(event) {
 }
 
 runButton.addEventListener("click", async () => {
-  const selected = state.metrics.filter((metric) => metric.implemented).map((metric) => metric.name);
+  const selected = state.metrics
+    .filter((metric) => metric.implemented && !hiddenMetricNames.has(metric.name))
+    .map((metric) => metric.name);
   if (!selected.length) {
     document.querySelector("#run-status").textContent = "当前没有已实现的指标。";
     return;
@@ -212,7 +215,9 @@ function renderEvaluationPreparation(data) {
     );
   }
 
-  const implemented = data.metrics.filter((metric) => metric.implemented);
+  const implemented = data.metrics.filter(
+    (metric) => metric.implemented && !hiddenMetricNames.has(metric.name),
+  );
   const labels = implemented.map((metric) => `<span>${escapeHtml(metric.label)}</span>`).join("");
   document.querySelector("#automatic-metric-summary").innerHTML = implemented.length
     ? `<div><strong>将自动评测 ${implemented.length} 个已实现指标</strong><small>字段不足的样本会显示为“不适用”</small></div><div class="automatic-metric-list">${labels}</div>`
@@ -226,7 +231,9 @@ function renderResults(data) {
   const summaryHost = document.querySelector("#result-summary");
   summaryHost.innerHTML = "";
   for (const dimension of dimensions) {
-    const summaries = data.summary.filter((item) => item.dimension === dimension);
+    const summaries = data.summary.filter(
+      (item) => item.dimension === dimension && !hiddenMetricNames.has(item.metric_name),
+    );
     const moduleScore = (data.module_scores || []).find((item) => item.dimension === dimension);
     const block = document.createElement("section");
     block.className = "result-dimension";
@@ -315,10 +322,12 @@ async function loadAdapters() {
 function renderModuleScore(moduleScore) {
   if (!moduleScore) return "";
   if (moduleScore.score === null) {
-    return '<div class="module-score-card is-empty"><div><span>端到端综合得分</span><strong>—</strong></div><small>本次没有成功产出分数的端到端指标，因此不计算总分。</small></div>';
+    return `<div class="module-score-card is-empty"><div><span>${escapeHtml(moduleScore.label)}</span><strong>—</strong></div><small>本次没有成功产出分数的该维度指标，因此不计算总分。</small></div>`;
   }
   const percent = Math.round(moduleScore.score * 100);
-  const components = moduleScore.components.map((item) => (
+  const components = moduleScore.components.filter(
+    (item) => !hiddenMetricNames.has(item.metric_name),
+  ).map((item) => (
     `<span title="原始权重 ${Math.round(item.base_weight * 100)}%">${escapeHtml(item.metric_label)} ${Math.round(item.normalized_weight * 100)}%</span>`
   )).join("");
   return `<div class="module-score-card"><div><span>${escapeHtml(moduleScore.label)}</span><strong>${percent}%</strong></div><div class="bar"><i style="width:${percent}%"></i></div><small>由 ${moduleScore.successful_metric_count} 个成功指标加权计算；缺字段、未配置和失败指标不参与</small><div class="module-score-components">${components}</div></div>`;
